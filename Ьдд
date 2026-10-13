@@ -1,0 +1,107 @@
+from enum import Enum
+import json
+
+
+# Цвета через Enum (требование задания)
+class Color(Enum):
+    BLACK = 30
+    RED = 31
+    GREEN = 32
+    YELLOW = 33
+    BLUE = 34
+    MAGENTA = 35
+    CYAN = 36
+    WHITE = 37
+
+
+# Все ANSI-команды в одном месте (требование задания)
+class ANSI:
+    RESET = "\033[0m"
+    CLEAR = "\033[2J"
+    HIDE_CURSOR = "\033[?25l"
+    SHOW_CURSOR = "\033[?25h"
+
+    @staticmethod
+    def color(c):
+        return f"\033[{c.value}m"
+
+    @staticmethod
+    def move(x, y):
+        return f"\033[{y};{x}H"
+
+
+class Printer:
+
+    def __init__(self, color, position, symbol="*", font_file="font5.json"):
+        self.color = color
+        self.position = position
+        self.symbol = symbol
+        try:
+            with open(font_file, encoding="utf-8") as f:
+                self.font = json.load(f)
+        except FileNotFoundError:
+            raise RuntimeError(f"Файл шрифта не найден: {font_file}")
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Ошибка разбора JSON в {font_file}: {e}")
+
+    # Превращает текст в список строк псевдошрифта
+    def _render(self, text):
+        height = len(next(iter(self.font.values())))
+        lines = []
+        for row in range(height):
+            parts = []
+            for c in text.upper():
+                pattern = self.font.get(c, self.font[" "])[row]
+                parts.append("".join(
+                    self.symbol if ch != " " else " " for ch in pattern))
+            lines.append(" ".join(parts))
+        return lines
+
+    # Печатает строки псевдошрифта в точке (x, y) нужным цветом
+    def _draw(self, text, x, y):
+        color_code = ANSI.color(self.color)
+        for i, line in enumerate(self._render(text)):
+            print(f"{ANSI.move(x, y + i)}{color_code}{line}{ANSI.RESET}",
+                  end="", flush=True)
+
+    # Публичный метод: рисуем и сдвигаем позицию вниз
+    def print(self, text):
+        x, y = self.position
+        self._draw(text, x, y)
+        self.position = (x, y + len(next(iter(self.font.values()))) + 1)
+
+    # Статический вывод (требование: classmethod)
+    @classmethod
+    def print_static(cls, text, color, position=(1, 1),
+                     symbol="*", font_file="font5.json"):
+        cls(color, position, symbol, font_file).print(text)
+
+    # Вход в with: спрятать курсор
+    def __enter__(self):
+        print(ANSI.HIDE_CURSOR, end="")
+        return self
+
+    # Выход из with: вернуть консоль в исходное состояние
+    def __exit__(self, *args):
+        print(ANSI.SHOW_CURSOR + ANSI.RESET, end="", flush=True)
+
+
+# Демонстрация
+if __name__ == "__main__":
+    import os
+    if os.name == "nt":
+        os.system("")
+
+    print(ANSI.CLEAR, end="", flush=True)
+
+    Printer.print_static("SONYA", Color.CYAN, (1, 1), "~", "font5.json")
+    Printer.print_static("FLP", Color.BLUE, (1, 8), "%", "font7.json")
+
+    with Printer(Color.RED, (1, 16), "o", "font7.json") as p:
+        p.print("MINE")
+        p.print("CRAFT")
+
+    with Printer(Color.GREEN, (50, 1), "^", "font5.json") as p:
+        p.print("CAT")
+
+    print(ANSI.move(1, 40), end="", flush=True)
